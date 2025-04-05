@@ -1,3 +1,4 @@
+import { ElementId } from "articulated";
 import { ClientMutation } from "./client_mutations";
 
 export type ClientHelloMessage = {
