@@ -1,13 +1,9 @@
-import { ElementId } from "articulated";
 import { ClientMutation } from "./client_mutations";
-
-export type ClientHelloMessage = {
-  type: "hello";
-};
 
 export type ClientMutationMessage = {
   type: "mutation";
   mutations: ClientMutation[];
+  clientCounter: number;
 };
 
-export type ClientMessage = ClientHelloMessage;
+export type ClientMessage = ClientMutationMessage;

@@ -1,7 +1,11 @@
+import { IdList } from "articulated";
 import { EditorState } from "prosemirror-state";
 import { WebSocket, WebSocketServer } from "ws";
+import { ClientMessage } from "../common/client_messages";
+import { allHandlers } from "../common/client_mutations";
 import { schema } from "../common/prosemirror";
-import { Message } from "../common/server_messages";
+import { ServerMessage } from "../common/server_messages";
+import { TrackedIdList } from "../common/tracked_id_list";
 
 const heartbeatInterval = 30000;
 
@@ -16,13 +20,18 @@ const heartbeatInterval = 30000;
  */
 export class RichTextServer {
   private state: EditorState;
-  private version: number;
+  private readonly trackedIds: TrackedIdList;
 
   private clients = new Set<WebSocket>();
 
   constructor(readonly wss: WebSocketServer) {
     this.state = EditorState.create({ schema });
-    this.version = 0;
+    const idList = IdList.new().insertAfter(
+      null,
+      { bunchId: "init", counter: 0 },
+      this.state.doc.nodeSize
+    );
+    this.trackedIds = new TrackedIdList(idList, true);
 
     this.wss.on("connection", (ws) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -35,32 +44,6 @@ export class RichTextServer {
         this.wsClose(ws);
       });
     });
-  }
-
-  private sendMessage(ws: WebSocket, msg: Message) {
-    if (ws.readyState == WebSocket.OPEN) {
-      ws.send(JSON.stringify(msg));
-    }
-  }
-
-  private echo(origin: WebSocket, data: string) {
-    for (const ws of this.clients) {
-      if (ws.readyState == WebSocket.OPEN) {
-        ws.send(data);
-      }
-    }
-  }
-
-  private wsOpen(ws: WebSocket) {
-    this.startHeartbeats(ws);
-
-    // Send the current state.
-    this.sendMessage(ws, {
-      type: "welcome",
-      mutations: this.mutations,
-    });
-
-    this.clients.add(ws);
   }
 
   /**
@@ -77,27 +60,68 @@ export class RichTextServer {
     }, heartbeatInterval);
   }
 
+  private wsClose(ws: WebSocket) {
+    this.clients.delete(ws);
+  }
+
+  private sendMessage(ws: WebSocket, msg: ServerMessage) {
+    if (ws.readyState == WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  }
+
+  private broadcast(msg: ServerMessage) {
+    const data = JSON.stringify(msg);
+    for (const ws of this.clients) {
+      if (ws.readyState == WebSocket.OPEN) {
+        ws.send(data);
+      }
+    }
+  }
+
+  private wsOpen(ws: WebSocket) {
+    this.startHeartbeats(ws);
+
+    // Send the current state.
+    this.sendMessage(ws, {
+      type: "hello",
+      docJson: this.state.doc.toJSON(),
+      idListJson: this.trackedIds.idList.save(),
+    });
+
+    this.clients.add(ws);
+  }
+
   private wsReceive(ws: WebSocket, data: string) {
-    const msg = JSON.parse(data) as Message;
+    const msg = JSON.parse(data) as ClientMessage;
     switch (msg.type) {
       case "mutation":
-        // Here is where you can choose to reject/alter the mutation, before
-        // adding it to the log (which is the source of truth) and
-        // broadcasting it.
-        // Note: Even if you reject the change, you should keep the BunchMeta,
-        // in case this client's future changes depend on it.
-        // TODO: Need a way to tell a client when one of its mutations has
-        // been acknowledged but not accepted as-is, so that the client can remove
-        // that mutation from its pendingMutations.
-        this.mutations.push(msg.mutation);
-        this.echo(ws, data);
+        const tr = this.state.tr;
+        for (const mutation of msg.mutations) {
+          const handler = allHandlers.find(
+            (handler) => handler.name === mutation.name
+          );
+          if (handler === undefined) {
+            console.error("Missing handler: " + mutation.name);
+            continue;
+          }
+          handler.apply(tr, this.trackedIds, mutation.args);
+        }
+
+        // TODO: Batch server messages by interval, not per mutation message.
+        const stepsJson = tr.steps.map((step) => step.toJSON());
+        const idListUpdates = this.trackedIds.getAndResetUpdates();
+        this.state = this.state.apply(tr);
+
+        this.broadcast({
+          type: "mutation",
+          stepsJson,
+          idListUpdates,
+          senderCounter: msg.clientCounter,
+        });
         break;
       default:
         console.error("Unknown message type: " + msg.type);
     }
-  }
-
-  private wsClose(ws: WebSocket) {
-    this.clients.delete(ws);
   }
 }

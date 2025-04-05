@@ -1,29 +1,18 @@
-import { ElementId, SavedIdList } from "articulated";
+import { SavedIdList } from "articulated";
+import { IdListUpdate } from "./tracked_id_list";
 
 export type ServerHelloMessage = {
   type: "hello";
-  docJSON: any;
-  idList: SavedIdList;
-  version: number;
+  docJson: any;
+  idListJson: SavedIdList;
 };
 
 export type ServerMutationMessage = {
   type: "mutation";
-  stepsJSON: any[];
+  stepsJson: any[];
   idListUpdates: IdListUpdate[];
+  // For the sender, so they know to stop rebasing their local copy.
+  senderCounter: number;
 };
-
-export type IdListUpdate =
-  | {
-      type: "insertAfter";
-      before: ElementId | null;
-      id: ElementId;
-      count: number;
-    }
-  | {
-      type: "deleteRange";
-      startId: ElementId;
-      endId?: ElementId;
-    };
 
 export type ServerMessage = ServerMutationMessage | ServerHelloMessage;

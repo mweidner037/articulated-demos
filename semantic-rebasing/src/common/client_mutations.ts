@@ -1,5 +1,6 @@
-import { ElementId, IdList } from "articulated";
-import { EditorState } from "prosemirror-state";
+import { ElementId } from "articulated";
+import { Transaction } from "prosemirror-state";
+import { TrackedIdList } from "./tracked_id_list";
 
 export type ClientMutation<T = any> = {
   name: string;
@@ -12,14 +13,9 @@ export type ClientMutationHandler<T> = {
    * Apply the mutation to the local state, which may be on the initiating client
    * or on the server.
    *
-   * Update the selection as if this was the user's own edit, in case its on the client.
-   * TODO: Selection handling when you're just rebasing (don't want to clobber the current selection).
+   * Selection changes are ignored.
    */
-  apply(
-    idList: IdList,
-    state: EditorState,
-    args: T
-  ): [newIdList: IdList, newState: EditorState];
+  apply(tr: Transaction, trackedIds: TrackedIdList, args: T): void;
 };
 
 export const InsertHandler: ClientMutationHandler<{
@@ -37,18 +33,12 @@ export const InsertHandler: ClientMutationHandler<{
   isInWord: boolean;
 }> = {
   name: "insert",
-  apply(idList, state, { before, id, content, isInWord }) {
-    if (isInWord && !idList.has(before)) return [idList, state];
+  apply(tr, trackedIds, { before, id, content, isInWord }) {
+    if (isInWord && !trackedIds.idList.has(before)) return;
 
-    idList = idList.insertAfter(before, id, content.length);
-    const index = idList.indexOf(id);
-
-    const tr = state.tr;
-    // insertText updates the selection for us.
+    trackedIds.insertAfter(before, id, content.length);
+    const index = trackedIds.idList.indexOf(id);
     tr.insertText(content, index);
-    state = state.apply(tr);
-
-    return [idList, state];
   },
 };
 
@@ -62,29 +52,21 @@ export const DeleteHandler: ClientMutationHandler<{
   contentLength?: number;
 }> = {
   name: "delete",
-  apply(idList, state, { startId, endId, contentLength }) {
-    const startIndex = idList.indexOf(startId, "right");
+  apply(tr, trackedIds, { startId, endId, contentLength }) {
+    const startIndex = trackedIds.idList.indexOf(startId, "right");
     const endIndex =
-      endId === undefined ? startIndex : idList.indexOf(endId, "left");
+      endId === undefined
+        ? startIndex
+        : trackedIds.idList.indexOf(endId, "left");
     const curLength = endIndex - startIndex + 1;
 
     if (contentLength !== undefined && curLength > contentLength + 10) {
       // More than ~1 word has been added to the range. Skip deleting it.
-      return [idList, state];
+      return;
     }
 
-    const allIds: ElementId[] = [];
-    for (let i = startIndex; i <= endIndex; i++) {
-      allIds.push(idList.at(i));
-    }
-    for (const id of allIds) idList = idList.delete(id);
-
-    const tr = state.tr;
-    // delete updates the selection for us. (TODO: check)
+    trackedIds.deleteRange(startIndex, endIndex);
     tr.delete(startIndex, endIndex);
-    state = state.apply(tr);
-
-    return [idList, state];
   },
 };
 
