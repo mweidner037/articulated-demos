@@ -1,16 +1,9 @@
-import {
-  AnnotatedStep,
-  Mutation,
-  ReplacePositions,
-  idEquals,
-} from "../common/mutation";
-import { EditorState, Plugin, Transaction } from "prosemirror-state";
-import { EditorView } from "prosemirror-view";
+import { maybeRandomString } from "maybe-random-string";
+import { exampleSetup } from "prosemirror-example-setup";
 import { Mark, Schema, Slice } from "prosemirror-model";
 import { schema as schemaBasic } from "prosemirror-schema-basic";
 import { addListNodes } from "prosemirror-schema-list";
-import { exampleSetup } from "prosemirror-example-setup";
-import { maybeRandomString } from "maybe-random-string";
+import { EditorState, Plugin, Transaction } from "prosemirror-state";
 import {
   AddMarkStep,
   AddNodeMarkStep,
@@ -22,10 +15,14 @@ import {
   ReplaceStep,
   Step,
 } from "prosemirror-transform";
+import { EditorView } from "prosemirror-view";
+import {
+  AnnotatedStep,
+  Mutation,
+  ReplacePositions,
+  idEquals,
+} from "../common/mutations";
 
-import "prosemirror-menu/style/menu.css";
-import "prosemirror-view/style/prosemirror.css";
-import "prosemirror-example-setup/style/style.css";
 import {
   MAX_POSITION,
   MIN_POSITION,
@@ -33,6 +30,9 @@ import {
   Outline,
   OutlineSavedState,
 } from "list-positions";
+import "prosemirror-example-setup/style/style.css";
+import "prosemirror-menu/style/menu.css";
+import "prosemirror-view/style/prosemirror.css";
 
 const DEBUG = false;
 

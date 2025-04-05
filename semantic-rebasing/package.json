@@ -1,8 +1,9 @@
 {
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
     "@list-positions/formatting": "^1.0.0",
+    "articulated": "^0.4.1",
+    "express": "^4.18.2",
     "list-positions": "^1.0.0",
     "maybe-random-string": "^1.0.0",
     "prosemirror-commands": "^1.5.2",

@@ -1,5 +1,5 @@
-import { Message } from "../common/messages";
-import { Mutation } from "../common/mutation";
+import { Mutation } from "../common/mutations";
+import { Message } from "../common/server_messages";
 import { ProseMirrorWrapper } from "./prosemirror_wrapper";
 import { WebSocketClient } from "./web_socket_client";
 

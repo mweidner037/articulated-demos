@@ -1,6 +1,7 @@
+import { EditorState } from "prosemirror-state";
 import { WebSocket, WebSocketServer } from "ws";
-import { Message } from "../common/messages";
-import { Mutation } from "../common/mutation";
+import { schema } from "../common/prosemirror";
+import { Message } from "../common/server_messages";
 
 const heartbeatInterval = 30000;
 
@@ -14,11 +15,15 @@ const heartbeatInterval = 30000;
  * clock or similar, to tell clients which of their past mutations have been acked.)
  */
 export class RichTextServer {
-  private readonly mutations: Mutation[] = [];
+  private state: EditorState;
+  private version: number;
 
   private clients = new Set<WebSocket>();
 
   constructor(readonly wss: WebSocketServer) {
+    this.state = EditorState.create({ schema });
+    this.version = 0;
+
     this.wss.on("connection", (ws) => {
       if (ws.readyState === WebSocket.OPEN) {
         this.wsOpen(ws);
