@@ -1,11 +1,8 @@
 {
   "license": "MIT",
   "dependencies": {
-    "@list-positions/formatting": "^1.0.0",
-    "articulated": "^0.4.1",
+    "articulated": "^0.5.0",
     "express": "^4.18.2",
-    "list-positions": "^1.0.0",
-    "maybe-random-string": "^1.0.0",
     "prosemirror-commands": "^1.5.2",
     "prosemirror-example-setup": "^1.2.2",
     "prosemirror-keymap": "^1.2.2",
@@ -16,6 +13,7 @@
     "prosemirror-state": "^1.4.3",
     "prosemirror-transform": "^1.8.0",
     "prosemirror-view": "^1.32.7",
+    "uuid": "^11.1.0",
     "ws": "^8.13.0"
   },
   "devDependencies": {

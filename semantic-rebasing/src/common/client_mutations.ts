@@ -5,6 +5,7 @@ import { TrackedIdList } from "./tracked_id_list";
 export type ClientMutation<T = any> = {
   name: string;
   args: T;
+  clientCounter: number;
 };
 
 export type ClientMutationHandler<T> = {
@@ -27,7 +28,7 @@ export const InsertHandler: ClientMutationHandler<{
   id: ElementId;
   content: string;
   /**
-   * True when before is a char in the same word. In that case,
+   * True when `before` is a char in the same word. In that case,
    * the insert will only succeed if before is still present.
    */
   isInWord: boolean;
@@ -58,8 +59,12 @@ export const DeleteHandler: ClientMutationHandler<{
       endId === undefined
         ? startIndex
         : trackedIds.idList.indexOf(endId, "left");
-    const curLength = endIndex - startIndex + 1;
+    if (endIndex < startIndex) {
+      // Nothing left to delete.
+      return;
+    }
 
+    const curLength = endIndex - startIndex + 1;
     if (contentLength !== undefined && curLength > contentLength + 10) {
       // More than ~1 word has been added to the range. Skip deleting it.
       return;

@@ -117,7 +117,8 @@ export class RichTextServer {
           type: "mutation",
           stepsJson,
           idListUpdates,
-          senderCounter: msg.clientCounter,
+          senderId: msg.clientId,
+          senderCounter: msg.mutations.at(-1)!.clientCounter,
         });
         break;
       default:

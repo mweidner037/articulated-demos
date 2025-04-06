@@ -11,7 +11,10 @@ export type ServerMutationMessage = {
   type: "mutation";
   stepsJson: any[];
   idListUpdates: IdListUpdate[];
-  // For the sender, so they know to stop rebasing their local copy.
+  senderId: string;
+  /**
+   * The last mutation's clientCounter. For the sender so that they know to stop rebasing.
+   */
   senderCounter: number;
 };
 

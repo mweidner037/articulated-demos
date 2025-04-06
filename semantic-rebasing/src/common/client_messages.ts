@@ -2,8 +2,8 @@ import { ClientMutation } from "./client_mutations";
 
 export type ClientMutationMessage = {
   type: "mutation";
+  clientId: string;
   mutations: ClientMutation[];
-  clientCounter: number;
 };
 
 export type ClientMessage = ClientMutationMessage;
