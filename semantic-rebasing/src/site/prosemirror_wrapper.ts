@@ -76,7 +76,8 @@ export class ProseMirrorWrapper {
 
     // The tr has steps but was not issued by us. It's a user input that we need
     // to reverse engineer and convert to a mutation.
-    for (const step of tr.steps) {
+    for (let i = 0; i < tr.steps.length; i++) {
+      const step = tr.steps[i];
       if (step instanceof ReplaceStep) {
         // Delete part
         if (step.from < step.to) {
@@ -103,16 +104,26 @@ export class ProseMirrorWrapper {
             // Skip future steps because their positions may be messed up.
             break;
           }
+
+          const content = step.slice.content.firstChild!.text!;
+
+          // Set isInWord if the first inserted char and the preceding char are both letters.
+          let isInWord = false;
+          if (/[a-zA-z]/.test(content[0]) && step.from > 0) {
+            const beforeChar = tr.docs[i].textBetween(step.from - 1, step.from);
+            if (beforeChar.length > 0 && /[a-zA-z]/.test(beforeChar[0])) {
+              isInWord = true;
+            }
+          }
+
           const before =
             step.from === 0 ? null : this.trackedIds.idList.at(step.from - 1);
           const newId = this.newId(before, this.trackedIds.idList);
-          const content = step.slice.content.firstChild!.text!;
           this.mutate(InsertHandler, {
             before,
             id: newId,
             content,
-            // TODO
-            isInWord: false,
+            isInWord,
           });
         }
       } else {
@@ -244,7 +255,9 @@ function selectionFromIds(
     case "all":
       return new AllSelection(doc);
     case "cursor":
-      return Selection.near(doc.resolve(idList.indexOf(idSel.id, "left")));
+      let pos = idList.indexOf(idSel.id, "left");
+      if (pos < 0) pos = 0;
+      return Selection.near(doc.resolve(pos));
     case "textRange":
       const from = idList.indexOf(idSel.start, "right");
       const to = idList.indexOf(idSel.end, "left");
