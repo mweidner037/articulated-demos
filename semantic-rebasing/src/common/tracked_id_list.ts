@@ -61,4 +61,23 @@ export class TrackedIdList {
       this.updates.push({ type: "deleteRange", startIndex, endIndex });
     }
   }
+
+  apply(update: IdListUpdate): void {
+    switch (update.type) {
+      case "insertAfter":
+        this._idList = this._idList.insertAfter(
+          update.before,
+          update.id,
+          update.count
+        );
+        break;
+      case "deleteRange":
+        const allIds: ElementId[] = [];
+        for (let i = update.startIndex; i <= update.endIndex; i++) {
+          allIds.push(this._idList.at(i));
+        }
+        for (const id of allIds) this._idList = this._idList.delete(id);
+        break;
+    }
+  }
 }

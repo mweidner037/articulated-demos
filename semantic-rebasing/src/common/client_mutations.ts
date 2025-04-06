@@ -4,6 +4,7 @@ import { TrackedIdList } from "./tracked_id_list";
 
 export type ClientMutation<T = any> = {
   name: string;
+  /** JSON serializable. */
   args: T;
   clientCounter: number;
 };
@@ -14,7 +15,8 @@ export type ClientMutationHandler<T> = {
    * Apply the mutation to the local state, which may be on the initiating client
    * or on the server.
    *
-   * Selection changes are ignored.
+   * Set the selection to what it should be if the user just performed this action,
+   * in case we are applying the mutation locally for the first time.
    */
   apply(tr: Transaction, trackedIds: TrackedIdList, args: T): void;
 };
