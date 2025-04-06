@@ -62,9 +62,7 @@ export class ProseMirrorWrapper {
     this.serverIdList = IdList.load(helloMessage.idListJson);
 
     this.view = new EditorView(document.querySelector("#editor"), {
-      state: EditorState.create({
-        schema,
-      }),
+      state: this.serverState,
       dispatchTransaction: (tr) => this.dispatchTransaction(tr),
     });
     this.trackedIds = new TrackedIdList(this.serverIdList, false);
@@ -105,7 +103,8 @@ export class ProseMirrorWrapper {
             // Skip future steps because their positions may be messed up.
             break;
           }
-          const before = this.trackedIds.idList.at(step.from - 1);
+          const before =
+            step.from === 0 ? null : this.trackedIds.idList.at(step.from - 1);
           const newId = this.newId(before, this.trackedIds.idList);
           const content = step.slice.content.firstChild!.text!;
           this.mutate(InsertHandler, {
@@ -124,8 +123,8 @@ export class ProseMirrorWrapper {
     }
   }
 
-  private newId(before: ElementId, idList: IdList): ElementId {
-    if (before.bunchId.startsWith(this.clientId)) {
+  private newId(before: ElementId | null, idList: IdList): ElementId {
+    if (before !== null && before.bunchId.startsWith(this.clientId)) {
       if (idList.maxCounter(before.bunchId) === before.counter) {
         return { bunchId: before.bunchId, counter: before.counter + 1 };
       }

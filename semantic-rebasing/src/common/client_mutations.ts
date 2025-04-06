@@ -73,7 +73,7 @@ export const DeleteHandler: ClientMutationHandler<{
     }
 
     trackedIds.deleteRange(startIndex, endIndex);
-    tr.delete(startIndex, endIndex);
+    tr.delete(startIndex, endIndex + 1);
   },
 };
 

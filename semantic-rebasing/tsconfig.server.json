@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "target": "ES6",
+    "target": "ES2022",
     /* Enable strict type checking. */
     "strict": true,
     /* Prevent errors caused by other libraries. */
