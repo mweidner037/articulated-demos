@@ -1,27 +1,35 @@
-# WebSocket-Prosemirror-Log
+# Semantic Rebasing
 
-A basic collaborative rich-text editor using [list-positions](https://github.com/mweidner037/list-positions#readme), a WebSocket server, and [ProseMirror](https://prosemirror.net/). It supports arbitrary schemas and works similarly to ProseMirror's built-in collaboration system, using a server-authoritative log of changes.
+Simple ProseMirror/WebSocket collaboration with a server that accounts for the meaning/intent of edits when rebasing them.
 
-When a client makes a change, a _mutation_ describing that change is sent to the server in JSON format. The server assigns that mutation a sequence number in the log and echoes it to all connected clients. It also stores the log to send to future clients. (In principle, the server could instead store the literal ProseMirror & list-positions states.)
+This is a demo for the [articulated](https://github.com/mweidner037/articulated) collaborative text-editing library.
 
-A client's state is always given by:
+## Architecture
 
-- First, apply all mutations received from (or confirmed by) the server, in the same order as the server's log.
-- Next, apply all pending local mutations, which have been performed by the local user but not yet confirmed by the server.
+Clients send _mutations_ to the server, which describe high-level user intent (e.g., "insert the character 'u' into the word 'color' here, unless that word has been deleted"). The server applies these mutations literally to its own copy of the ProseMirror state, in the order that it receives them. It also broadcasts the resulting changes (ProseMirror [steps](https://prosemirror.net/docs/ref/#transform.Steps)) to all clients over WebSockets. Clients apply those steps to their own ProseMirror states, accommodating pending local updates using [server reconciliation](https://mattweidner.com/2024/06/04/server-architectures.html#1-server-reconciliation).
 
-To process a remote message from the server, the pending local mutations are undone, the remote message is applied, and then the pending local mutations are redone. If a mutation no longer makes sense in its current state, it is skipped.
+The `articulated` library is used to address characters: each character is assigned an [ElementId](https://github.com/mweidner037/articulated#elementid), which doesn't change over time, unlike a ProseMirror position (~array index), which increments/decrements as text is added/deleted earlier in the document. Mutations sent to the server then reference these ElementIds - e.g., "insert 'u' at ElementId <...> directly after ElementId <...>". The server follows such instructions literally, using `articulated` to translate between ElementIds and their current ProseMirror positions.
 
-Internally, each mutation consists of ordinary ProseMirror [steps](https://prosemirror.net/docs/guide/#transform), but with their list indices (ProseMirror positions) replaced by Positions from list-positions. That way, it is always possible to "rebase" a step on top of the server's latest state: just look up the new indices corresponding to each steps' Positions. (Internally, the lookup uses an [Outline](https://github.com/mweidner037/list-positions#outline).)
+### Semantics
 
-Overall, this strategy is the same as [ProseMirror's built-in collaboration system](https://prosemirror.net/docs/guide/#collab), but using immutable Positions (CRDT-style) instead of indices that are transformed during rebasing (OT-style). As a result, clients never need to rebase and resubmit steps: steps can be rebased "as-is".
+The combination of server reconciliation and `articulated` makes it possible to implement interesting semantics, in the case where the server receives a mutation from a client that intended it for a different state (i.e., the mutation needs to be [rebased](https://mattweidner.com/2024/06/04/server-architectures.html#server-side-rebasing)):
 
-Using ProseMirror's built-in steps lets many ProseMirror features work out-of-the-box, just like with ProseMirror's built-in collaboration. In contrast, [y-prosemirror](https://github.com/yjs/y-prosemirror) and [websocket-prosemirror-blocks](../websocket-prosemirror-blocks#readme) rewrite the ProseMirror state directly, which breaks the default cursor tracking, undo/redo, and [some other features](https://discuss.yjs.dev/t/decorationsets-and-remapping-broken-with-y-sync-plugin/845).
+- Server reconciliation allows the mutations to make arbitrary changes without worrying about eventual consistency (unlike a CRDT or OT architecture).
+- `articulated` lets the server manipulate ElementIds at will - deleting, creating, or even reordering them - so it has more flexibility than using CRDT positions, OT indices, or [list-positions](https://github.com/mweidner037/list-positions).
 
-_References: [Collaborative Editing in ProseMirror](https://marijnhaverbeke.nl/blog/collaborative-editing.html); [Replicache's sync strategy](https://rocicorp.dev/blog/ready-player-two)_
+As an example, the demo's "insert" mutation follows the rule: if the inserted content is a character inserted directly after another character (i.e., in the middle of the word), and that word is no longer present by the time the mutation reaches the server (because it was deleted concurrently), then the insertion is skipped. Here's a screen recording:
+
+TODO: example movie
+
+Thus the demo avoids the "colour" anomaly described by [Alex Clemmer](https://www.moment.dev/blog/lies-i-was-told-pt-1).
+
+<!-- A similar effect happens if the insertion reaches the server before the word's deletion: the "delete" mutation targets a range instead of individual characters ("delete from \<start\> to \<end\>"), so the deleting the whole word will also delete characters concurrently inserted in the middle. -->
+
+## Code
 
 Code organization:
 
-- `src/common/`: Messages shared between clients and the server.
+- `src/common/`: Messages and code shared between clients and the server.
 - `src/server/`: WebSocket server.
 - `src/site/`: ProseMirror client.
 
@@ -33,11 +41,11 @@ First, install [Node.js](https://nodejs.org/). Then run `npm i`.
 
 ### `npm run dev`
 
-Build the app from `src/`, in [development mode](https://webpack.js.org/guides/development/). You can also use `npm run watch`.
+Build the client from `src/site/`, in [development mode](https://webpack.js.org/guides/development/). You can also use `npm run watch`.
 
 ### `npm run build`
 
-Build the app from `src/`, in [production mode](https://webpack.js.org/guides/production/).
+Build the client from `src/site/`, in [production mode](https://webpack.js.org/guides/production/).
 
 ### `npm start`
 

@@ -1,5 +1,5 @@
 # articulated demos
 
-Demos for the [articulated](https://www.npmjs.com/package/articulated) collaborative text-editing library.
+Demos for the [articulated](https://github.com/mweidner037/articulated) collaborative text-editing library.
 
-- [semantic-rebasing](./semantic-rebasing/): Simple ProseMirror/WebSocket collaboration with a server that accounts for the meaning/intent of edits when rebasing them.
+- [Semantic Rebasing](./semantic-rebasing/): Simple ProseMirror/WebSocket collaboration with a server that accounts for the meaning/intent of edits when rebasing them.
