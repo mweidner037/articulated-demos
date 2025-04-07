@@ -19,7 +19,7 @@ The combination of server reconciliation and `articulated` makes it possible to 
 
 As an example, the demo's "insert" mutation follows the rule: if the inserted content is a character inserted directly after another character (i.e., in the middle of the word), and that word is no longer present by the time the mutation reaches the server (because it was deleted concurrently), then the insertion is skipped. Here's a screen recording:
 
-TODO: example movie
+https://github.com/user-attachments/assets/0892d4df-7dfd-45ef-9462-b2ce994f71e4
 
 Thus the demo avoids the "colour" anomaly described by [Alex Clemmer](https://www.moment.dev/blog/lies-i-was-told-pt-1).
 
