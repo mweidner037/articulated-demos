@@ -15,7 +15,9 @@
     "declaration": false,
     /* Emit sourcemap files. */
     "sourceMap": true,
-    "rootDir": "src"
+    /* Use tsc to typecheck only. */
+    "rootDir": "src",
+    "noEmit": true
   },
   "include": [
     "src/site",

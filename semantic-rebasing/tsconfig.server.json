@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     /* Enable interop with dependencies using different module systems. */
     "esModuleInterop": true,
-    /* Use tsc (npm run build) to typecheck only. */
+    /* Use tsc to typecheck only. */
     "noEmit": true,
     "rootDir": "src"
   },
