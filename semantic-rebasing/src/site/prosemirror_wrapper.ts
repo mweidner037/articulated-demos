@@ -1,4 +1,6 @@
 import { ElementId, IdList } from "articulated";
+import { baseKeymap } from "prosemirror-commands";
+import { keymap } from "prosemirror-keymap";
 import "prosemirror-menu/style/menu.css";
 import { Node } from "prosemirror-model";
 import {
@@ -17,6 +19,7 @@ import {
   ClientMutationHandler,
   DeleteHandler,
   InsertHandler,
+  InsertInWordHandler,
 } from "../common/client_mutations";
 import { schema } from "../common/prosemirror";
 import {
@@ -25,7 +28,7 @@ import {
 } from "../common/server_messages";
 import { TrackedIdList } from "../common/tracked_id_list";
 
-const DEBUG = false;
+const DEBUG = true;
 const META_KEY = "ProsemirrorWrapper";
 
 export class ProseMirrorWrapper {
@@ -58,6 +61,7 @@ export class ProseMirrorWrapper {
     this.serverState = EditorState.create({
       schema,
       doc: Node.fromJSON(schema, helloMessage.docJson),
+      plugins: [keymap(baseKeymap)],
     });
     this.serverIdList = IdList.load(helloMessage.idListJson);
 
@@ -78,11 +82,14 @@ export class ProseMirrorWrapper {
     // to reverse engineer and convert to a mutation.
     for (let i = 0; i < tr.steps.length; i++) {
       const step = tr.steps[i];
+      if (DEBUG) console.log(`dispatch ${i + 1}/${tr.steps.length}`, step);
       if (step instanceof ReplaceStep) {
         // Delete part
         if (step.from < step.to) {
           const startId = this.trackedIds.idList.at(step.from);
           if (step.to === step.from + 1) {
+            // TODO: Need to apply to a state relative to the tr, so we can figure out what future steps are doing?
+            // What if our change is different from the step's, so that future steps need rebasing?
             this.mutate(DeleteHandler, { startId });
           } else {
             this.mutate(DeleteHandler, {
@@ -94,36 +101,35 @@ export class ProseMirrorWrapper {
         }
         // Insert part
         if (step.slice.size > 0) {
-          if (
-            !(
-              step.slice.content.childCount === 1 &&
-              step.slice.content.firstChild!.isText
-            )
-          ) {
-            console.error("Unsupported insert slice:", step.slice);
-            // Skip future steps because their positions may be messed up.
-            break;
-          }
-
-          const content = step.slice.content.firstChild!.text!;
+          const before = this.trackedIds.idList.at(step.from - 1);
+          const newId = this.newId(before, this.trackedIds.idList);
 
           // Set isInWord if the first inserted char and the preceding char are both letters.
-          let isInWord = false;
-          if (/[a-zA-z]/.test(content[0]) && step.from > 0) {
-            const beforeChar = tr.docs[i].textBetween(step.from - 1, step.from);
-            if (beforeChar.length > 0 && /[a-zA-z]/.test(beforeChar[0])) {
-              isInWord = true;
+          if (
+            step.slice.content.childCount === 1 &&
+            step.slice.content.firstChild!.isText
+          ) {
+            const content = step.slice.content.firstChild!.text!;
+            if (/[a-zA-z]/.test(content[0]) && step.from > 0) {
+              const beforeChar = tr.docs[i].textBetween(
+                step.from - 1,
+                step.from
+              );
+              if (beforeChar.length > 0 && /[a-zA-z]/.test(beforeChar[0])) {
+                this.mutate(InsertInWordHandler, {
+                  before,
+                  id: newId,
+                  content,
+                });
+                continue;
+              }
             }
           }
 
-          const before =
-            step.from === 0 ? null : this.trackedIds.idList.at(step.from - 1);
-          const newId = this.newId(before, this.trackedIds.idList);
           this.mutate(InsertHandler, {
             before,
             id: newId,
-            content,
-            isInWord,
+            contentJson: step.slice.toJSON(),
           });
         }
       } else {
@@ -158,10 +164,15 @@ export class ProseMirrorWrapper {
     };
 
     // Perform locally.
+    if (DEBUG) {
+      console.log("mutate", handler.name, args);
+      console.log("  before", this.view.state.doc);
+    }
     const tr = this.view.state.tr;
     handler.apply(tr, this.trackedIds, args);
     tr.setMeta(META_KEY, true);
     this.view.updateState(this.view.state.apply(tr));
+    if (DEBUG) console.log("  after", this.view.state.doc);
 
     // Store and send to server.
     this.nextClientCounter++;

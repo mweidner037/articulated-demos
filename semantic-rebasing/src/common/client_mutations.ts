@@ -1,5 +1,7 @@
 import { ElementId } from "articulated";
+import { Slice } from "prosemirror-model";
 import { Transaction } from "prosemirror-state";
+import { schema } from "./prosemirror";
 import { TrackedIdList } from "./tracked_id_list";
 
 export type ClientMutation<T = any> = {
@@ -28,16 +30,29 @@ export const InsertHandler: ClientMutationHandler<{
    */
   before: ElementId;
   id: ElementId;
-  content: string;
-  /**
-   * True when `before` is a char in the same word. In that case,
-   * the insert will only succeed if before is still present.
-   */
-  isInWord: boolean;
+  contentJson: unknown;
 }> = {
   name: "insert",
-  apply(tr, trackedIds, { before, id, content, isInWord }) {
-    if (isInWord && !trackedIds.idList.has(before)) return;
+  apply(tr, trackedIds, { before, id, contentJson }) {
+    const slice = Slice.fromJSON(schema, contentJson);
+    trackedIds.insertAfter(before, id, slice.size);
+    const index = trackedIds.idList.indexOf(id);
+    tr.replace(index, index, slice);
+  },
+};
+
+/**
+ * Inserts text in the context of an existing word, skipping if that word
+ * has been deleted.
+ */
+export const InsertInWordHandler: ClientMutationHandler<{
+  before: ElementId;
+  id: ElementId;
+  content: string;
+}> = {
+  name: "insertInWord",
+  apply(tr, trackedIds, { before, id, content }) {
+    if (!trackedIds.idList.has(before)) return;
 
     trackedIds.insertAfter(before, id, content.length);
     const index = trackedIds.idList.indexOf(id);
@@ -79,5 +94,6 @@ export const DeleteHandler: ClientMutationHandler<{
 
 export const allHandlers: ClientMutationHandler<any>[] = [
   InsertHandler,
+  InsertInWordHandler,
   DeleteHandler,
 ];

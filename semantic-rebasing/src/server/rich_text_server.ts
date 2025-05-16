@@ -1,5 +1,6 @@
 import { IdList } from "articulated";
 import { EditorState } from "prosemirror-state";
+import util from "util";
 import { WebSocket, WebSocketServer } from "ws";
 import { ClientMessage } from "../common/client_messages";
 import { allHandlers } from "../common/client_mutations";
@@ -105,6 +106,14 @@ export class RichTextServer {
             console.error("Missing handler: " + mutation.name);
             continue;
           }
+          console.log(
+            mutation.name,
+            util.inspect(mutation.args, {
+              showHidden: false,
+              depth: null,
+              colors: true,
+            })
+          );
           handler.apply(tr, this.trackedIds, mutation.args);
         }
 

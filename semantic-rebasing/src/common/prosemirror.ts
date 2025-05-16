@@ -2,7 +2,7 @@ import { Schema } from "prosemirror-model";
 
 export const schema = new Schema({
   nodes: {
-    doc: { content: "block*" },
+    doc: { content: "block+" },
     paragraph: {
       content: "inline*",
       group: "block",
