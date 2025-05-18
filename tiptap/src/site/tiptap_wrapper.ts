@@ -1,18 +1,8 @@
+import { Editor } from "@tiptap/core";
+import { Node } from "@tiptap/pm/model";
+import { EditorState, Transaction } from "@tiptap/pm/state";
+import StarterKit from "@tiptap/starter-kit";
 import { ElementId, IdList } from "articulated";
-import { baseKeymap } from "prosemirror-commands";
-import { keymap } from "prosemirror-keymap";
-import "prosemirror-menu/style/menu.css";
-import { Node } from "prosemirror-model";
-import {
-  AllSelection,
-  EditorState,
-  Selection,
-  TextSelection,
-  Transaction,
-} from "prosemirror-state";
-import { ReplaceStep, Step } from "prosemirror-transform";
-import { EditorView } from "prosemirror-view";
-import "prosemirror-view/style/prosemirror.css";
 import {
   allHandlers,
   ClientMutation,
@@ -21,7 +11,6 @@ import {
   InsertHandler,
   InsertInWordHandler,
 } from "../common/client_mutations";
-import { schema } from "../common/prosemirror";
 import {
   ServerHelloMessage,
   ServerMutationMessage,
@@ -32,12 +21,17 @@ const DEBUG = true;
 const META_KEY = "ProsemirrorWrapper";
 
 export class ProseMirrorWrapper {
-  readonly view: EditorView;
+  readonly editor: Editor;
 
   private nextClientCounter = 1;
 
   private nextBunchIdCounter = 0;
 
+  /**
+   * The last known state of this.editor.view.
+   * We store this so we can reference the pre-tr state in onTransaction.
+   */
+  private clientState: EditorState;
   /**
    * The last state received from the server.
    */
@@ -58,17 +52,19 @@ export class ProseMirrorWrapper {
     readonly onLocalMutation: (mutation: ClientMutation) => void,
     helloMessage: ServerHelloMessage
   ) {
-    this.serverState = EditorState.create({
-      schema,
-      doc: Node.fromJSON(schema, helloMessage.docJson),
-      plugins: [keymap(baseKeymap)],
+    this.editor = new Editor({
+      element: document.querySelector("#editor")!,
+      extensions: [StarterKit],
+      content: helloMessage.docJson,
+      editorProps: {
+        dispatchTransaction: (tr) => this.dispatchTransaction(tr),
+      },
     });
+
+    this.serverState = this.editor.view.state;
     this.serverIdList = IdList.load(helloMessage.idListJson);
 
-    this.view = new EditorView(document.querySelector("#editor"), {
-      state: this.serverState,
-      dispatchTransaction: (tr) => this.dispatchTransaction(tr),
-    });
+    this.clientState = this.serverState;
     this.trackedIds = new TrackedIdList(this.serverIdList, false);
   }
 

@@ -1,8 +1,8 @@
 import { ElementId } from "articulated";
-import { Slice } from "prosemirror-model";
-import { Transaction } from "prosemirror-state";
 import { schema } from "./prosemirror";
 import { TrackedIdList } from "./tracked_id_list";
+import { Transaction } from "@tiptap/pm/state";
+import { Slice } from "@tiptap/pm/model";
 
 export type ClientMutation<T = any> = {
   name: string;

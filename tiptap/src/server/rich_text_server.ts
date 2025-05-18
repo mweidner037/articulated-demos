@@ -1,5 +1,5 @@
+import { EditorState } from "@tiptap/pm/state";
 import { IdList } from "articulated";
-import { EditorState } from "prosemirror-state";
 import util from "util";
 import { WebSocket, WebSocketServer } from "ws";
 import { ClientMessage } from "../common/client_messages";

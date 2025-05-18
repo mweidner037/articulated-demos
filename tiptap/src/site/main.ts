@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import { ClientMessage } from "../common/client_messages";
 import { ClientMutation } from "../common/client_mutations";
 import { ServerMessage } from "../common/server_messages";
-import { ProseMirrorWrapper } from "./prosemirror_wrapper";
+import { ProseMirrorWrapper } from "./tiptap_wrapper";
 import { WebSocketClient } from "./web_socket_client";
 
 const wsURL = location.origin.replace(/^http/, "ws");
