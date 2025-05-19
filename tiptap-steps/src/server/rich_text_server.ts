@@ -4,8 +4,9 @@ import util from "util";
 import { WebSocket, WebSocketServer } from "ws";
 import { ClientMessage } from "../common/client_messages";
 import { allHandlers } from "../common/client_mutations";
-import { schema } from "../common/prosemirror";
+import { DEBUG } from "../common/debug";
 import { ServerMessage } from "../common/server_messages";
+import { TIPTAP_SCHEMA } from "../common/tiptap";
 import { TrackedIdList } from "../common/tracked_id_list";
 
 const heartbeatInterval = 30000;
@@ -26,7 +27,7 @@ export class RichTextServer {
   private clients = new Set<WebSocket>();
 
   constructor(readonly wss: WebSocketServer) {
-    this.state = EditorState.create({ schema });
+    this.state = EditorState.create({ schema: TIPTAP_SCHEMA });
     const idList = IdList.new().insertAfter(
       null,
       { bunchId: "init", counter: 0 },
@@ -97,8 +98,19 @@ export class RichTextServer {
     const msg = JSON.parse(data) as ClientMessage;
     switch (msg.type) {
       case "mutation":
+        if (DEBUG) {
+          console.log(
+            "Apply mutations",
+            util.inspect(this.state.doc.toJSON(), {
+              showHidden: false,
+              depth: null,
+              colors: true,
+            })
+          );
+        }
         const tr = this.state.tr;
-        for (const mutation of msg.mutations) {
+        for (let i = 0; i < msg.mutations.length; i++) {
+          const mutation = msg.mutations[i];
           const handler = allHandlers.find(
             (handler) => handler.name === mutation.name
           );
@@ -106,21 +118,45 @@ export class RichTextServer {
             console.error("Missing handler: " + mutation.name);
             continue;
           }
+          if (DEBUG) {
+            console.log(
+              `mutation ${i + 1}/${msg.mutations.length}:\n`,
+              mutation.name,
+              util.inspect(mutation.args, {
+                showHidden: false,
+                depth: null,
+                colors: true,
+              })
+            );
+          }
+          handler.apply(tr, this.trackedIds, mutation.args);
+          if (DEBUG) {
+            console.log(
+              "result:\n",
+              util.inspect(tr.doc.toJSON(), {
+                showHidden: false,
+                depth: null,
+                colors: true,
+              })
+            );
+          }
+        }
+
+        // TODO: Batch server messages by interval, not per mutation message.
+        const stepsJson = tr.steps.map((step) => step.toJSON());
+        if (DEBUG) {
           console.log(
-            mutation.name,
-            util.inspect(mutation.args, {
+            "steps:\n",
+            util.inspect(stepsJson, {
               showHidden: false,
               depth: null,
               colors: true,
             })
           );
-          handler.apply(tr, this.trackedIds, mutation.args);
         }
-
-        // TODO: Batch server messages by interval, not per mutation message.
-        const stepsJson = tr.steps.map((step) => step.toJSON());
         const idListUpdates = this.trackedIds.getAndResetUpdates();
         this.state = this.state.apply(tr);
+        // TODO (here and on client): assert lengths match.
 
         this.broadcast({
           type: "mutation",

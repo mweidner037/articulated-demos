@@ -8,6 +8,12 @@ export type IdListUpdate =
       count: number;
     }
   | {
+      type: "insertBefore";
+      after: ElementId | null;
+      id: ElementId;
+      count: number;
+    }
+  | {
       type: "deleteRange";
       startIndex: number;
       endIndex: number;
@@ -50,6 +56,19 @@ export class TrackedIdList {
     }
   }
 
+  insertBefore(after: ElementId | null, newId: ElementId, count = 1) {
+    this._idList = this._idList.insertBefore(after, newId, count);
+
+    if (this.trackChanges) {
+      this.updates.push({
+        type: "insertBefore",
+        after,
+        id: newId,
+        count,
+      });
+    }
+  }
+
   deleteRange(startIndex: number, endIndex: number) {
     const allIds: ElementId[] = [];
     for (let i = startIndex; i <= endIndex; i++) {
@@ -64,6 +83,13 @@ export class TrackedIdList {
 
   apply(update: IdListUpdate): void {
     switch (update.type) {
+      case "insertBefore":
+        this._idList = this._idList.insertAfter(
+          update.after,
+          update.id,
+          update.count
+        );
+        break;
       case "insertAfter":
         this._idList = this._idList.insertAfter(
           update.before,
@@ -78,6 +104,8 @@ export class TrackedIdList {
         }
         for (const id of allIds) this._idList = this._idList.delete(id);
         break;
+      default:
+        void (update satisfies never);
     }
   }
 }

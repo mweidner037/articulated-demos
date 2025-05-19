@@ -1,8 +1,8 @@
-import { ElementId } from "articulated";
-import { schema } from "./prosemirror";
-import { TrackedIdList } from "./tracked_id_list";
-import { Transaction } from "@tiptap/pm/state";
 import { Slice } from "@tiptap/pm/model";
+import { Transaction } from "@tiptap/pm/state";
+import { ElementId } from "articulated";
+import { TIPTAP_SCHEMA } from "../common/tiptap";
+import { TrackedIdList } from "./tracked_id_list";
 
 export type ClientMutation<T = any> = {
   name: string;
@@ -23,77 +23,72 @@ export type ClientMutationHandler<T> = {
   apply(tr: Transaction, trackedIds: TrackedIdList, args: T): void;
 };
 
+// Although this derives from the same step (ReplaceStep) as ReplaceHandler,
+// we need a special case for the pure-insert case, since insert-after is
+// semantically different than inserting in place of a deleted range.
 export const InsertHandler: ClientMutationHandler<{
   /**
-   * Non-null because we never insert at the beginning of the doc - at most
-   * just after the doc node's start position.
+   * null if at the beginning of the document.
    */
-  before: ElementId;
-  id: ElementId;
-  contentJson: unknown;
+  beforeId: ElementId | null;
+  newId: ElementId;
+  sliceJson: unknown;
 }> = {
   name: "insert",
-  apply(tr, trackedIds, { before, id, contentJson }) {
-    const slice = Slice.fromJSON(schema, contentJson);
-    trackedIds.insertAfter(before, id, slice.size);
-    const index = trackedIds.idList.indexOf(id);
+  apply(tr, trackedIds, { beforeId, newId, sliceJson }) {
+    const slice = Slice.fromJSON(TIPTAP_SCHEMA, sliceJson);
+    trackedIds.insertAfter(beforeId, newId, slice.size);
+    const index = trackedIds.idList.indexOf(newId);
     tr.replace(index, index, slice);
   },
 };
 
 /**
- * Inserts text in the context of an existing word, skipping if that word
- * has been deleted.
+ * Delete or delete-and-insert.
  */
-export const InsertInWordHandler: ClientMutationHandler<{
-  before: ElementId;
-  id: ElementId;
-  content: string;
+export const ReplaceHandler: ClientMutationHandler<{
+  /** Deletion range is inclusive. */
+  fromId: ElementId;
+  /** Omitted if == from (single char deletion). */
+  toId?: ElementId;
+  /** Present if we're also inserting. */
+  insert?: {
+    newId: ElementId;
+    sliceJson: unknown;
+  };
 }> = {
-  name: "insertInWord",
-  apply(tr, trackedIds, { before, id, content }) {
-    if (!trackedIds.idList.has(before)) return;
+  name: "replace",
+  apply(tr, trackedIds, { fromId, toId, insert }) {
+    const from = trackedIds.idList.indexOf(fromId, "right");
+    const to =
+      toId === undefined ? from : trackedIds.idList.indexOf(toId, "left");
 
-    trackedIds.insertAfter(before, id, content.length);
-    const index = trackedIds.idList.indexOf(id);
-    tr.insertText(content, index);
-  },
-};
+    const slice =
+      insert === undefined
+        ? undefined
+        : Slice.fromJSON(TIPTAP_SCHEMA, insert.sliceJson);
 
-export const DeleteHandler: ClientMutationHandler<{
-  startId: ElementId;
-  endId?: ElementId;
-  /**
-   * The original length of the deleted content. For range deletes, used to decide
-   * if we should skip this delete because too much new content has since been added.
-   */
-  contentLength?: number;
-}> = {
-  name: "delete",
-  apply(tr, trackedIds, { startId, endId, contentLength }) {
-    const startIndex = trackedIds.idList.indexOf(startId, "right");
-    const endIndex =
-      endId === undefined
-        ? startIndex
-        : trackedIds.idList.indexOf(endId, "left");
-    if (endIndex < startIndex) {
-      // Nothing left to delete.
-      return;
+    if (from <= to) {
+      tr.replace(from, to + 1, slice);
+      trackedIds.deleteRange(from, to);
+      if (insert) {
+        // We an insert id anywhere within the range's exclusive boundary;
+        // different choices only affect our sort order relative to chars that are
+        // inserted-after one of the deleted ids.
+        // Let's put id just before the range.
+        trackedIds.insertBefore(fromId, insert.newId, slice!.size);
+      }
+    } else {
+      // This happens if the whole range was already deleted (due to the left/right bias).
+      if (insert) {
+        tr.replace(from, from, slice);
+        trackedIds.insertBefore(fromId, insert.newId, slice!.size);
+      }
     }
-
-    const curLength = endIndex - startIndex + 1;
-    if (contentLength !== undefined && curLength > contentLength + 10) {
-      // More than ~1 word has been added to the range. Skip deleting it.
-      return;
-    }
-
-    trackedIds.deleteRange(startIndex, endIndex);
-    tr.delete(startIndex, endIndex + 1);
   },
 };
 
 export const allHandlers: ClientMutationHandler<any>[] = [
   InsertHandler,
-  InsertInWordHandler,
-  DeleteHandler,
+  ReplaceHandler,
 ];

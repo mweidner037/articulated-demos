@@ -1,24 +1,30 @@
-import { Editor } from "@tiptap/core";
+import { Editor, EditorEvents } from "@tiptap/core";
 import { Node } from "@tiptap/pm/model";
-import { EditorState, Transaction } from "@tiptap/pm/state";
-import StarterKit from "@tiptap/starter-kit";
+import {
+  AllSelection,
+  EditorState,
+  Selection,
+  TextSelection,
+} from "@tiptap/pm/state";
+import { ReplaceStep, Step } from "@tiptap/pm/transform";
 import { ElementId, IdList } from "articulated";
+import { assert } from "chai";
 import {
   allHandlers,
   ClientMutation,
   ClientMutationHandler,
-  DeleteHandler,
   InsertHandler,
-  InsertInWordHandler,
+  ReplaceHandler,
 } from "../common/client_mutations";
+import { DEBUG } from "../common/debug";
 import {
   ServerHelloMessage,
   ServerMutationMessage,
 } from "../common/server_messages";
+import { TIPTAP_EXTENSIONS } from "../common/tiptap";
 import { TrackedIdList } from "../common/tracked_id_list";
 
-const DEBUG = true;
-const META_KEY = "ProsemirrorWrapper";
+const META_KEY = "TiptapWrapper";
 
 export class ProseMirrorWrapper {
   readonly editor: Editor;
@@ -49,83 +55,98 @@ export class ProseMirrorWrapper {
 
   constructor(
     readonly clientId: string,
-    readonly onLocalMutation: (mutation: ClientMutation) => void,
+    readonly onLocalMutations: (mutations: ClientMutation[]) => void,
     helloMessage: ServerHelloMessage
   ) {
     this.editor = new Editor({
       element: document.querySelector("#editor")!,
-      extensions: [StarterKit],
+      extensions: TIPTAP_EXTENSIONS,
       content: helloMessage.docJson,
-      editorProps: {
-        dispatchTransaction: (tr) => this.dispatchTransaction(tr),
-      },
+      onTransaction: this.onTransaction.bind(this),
     });
 
     this.serverState = this.editor.view.state;
     this.serverIdList = IdList.load(helloMessage.idListJson);
+    assert.strictEqual(
+      this.serverState.doc.nodeSize,
+      this.serverIdList.length,
+      "server state length mismatch"
+    );
 
     this.clientState = this.serverState;
     this.trackedIds = new TrackedIdList(this.serverIdList, false);
   }
 
-  private dispatchTransaction(tr: Transaction): void {
+  private onTransaction({
+    transaction: tr,
+  }: EditorEvents["transaction"]): void {
     if (tr.getMeta(META_KEY) !== undefined || tr.steps.length === 0) {
-      this.view.updateState(this.view.state.apply(tr));
+      if (DEBUG) console.log("onTransaction top case");
+      // Let through and record the new clientState.
+      this.clientState = this.editor.view.state;
       return;
     }
 
-    // The tr has steps but was not issued by us. It's a user input that we need
-    // to reverse engineer and convert to a mutation.
+    // The tr is not ours. Convert its steps to mutations and issue them collaboratively.
+    // To ensure consistency with the server, we also overwrite the editor's state with
+    // the result of these mutations (in this.mutate).
+    if (DEBUG) {
+      console.log("onTransaction extract mutations", this.clientState.doc);
+    }
+    const mutations: ClientMutation[] = [];
+    const currentTr = this.clientState.tr;
+    const currentIds = new TrackedIdList(this.trackedIds.idList, false);
+    const addMutation = <T>(handler: ClientMutationHandler<T>, args: T) => {
+      handler.apply(currentTr, currentIds, args);
+      mutations.push({
+        name: handler.name,
+        args,
+        clientCounter: this.nextClientCounter++,
+      });
+    };
+    const getNewId = (beforeId: ElementId | null) => {
+      if (beforeId !== null && beforeId.bunchId.startsWith(this.clientId)) {
+        if (
+          currentIds.idList.maxCounter(beforeId.bunchId) === beforeId.counter
+        ) {
+          return { bunchId: beforeId.bunchId, counter: beforeId.counter + 1 };
+        }
+      }
+
+      const bunchId = `${this.clientId}_${this.nextBunchIdCounter++}`;
+      return { bunchId, counter: 0 };
+    };
+
     for (let i = 0; i < tr.steps.length; i++) {
       const step = tr.steps[i];
-      if (DEBUG) console.log(`dispatch ${i + 1}/${tr.steps.length}`, step);
+      if (DEBUG) console.log(`  step ${i + 1}/${tr.steps.length}`, step);
       if (step instanceof ReplaceStep) {
-        // Delete part
         if (step.from < step.to) {
-          const startId = this.trackedIds.idList.at(step.from);
-          if (step.to === step.from + 1) {
-            // TODO: Need to apply to a state relative to the tr, so we can figure out what future steps are doing?
-            // What if our change is different from the step's, so that future steps need rebasing?
-            this.mutate(DeleteHandler, { startId });
-          } else {
-            this.mutate(DeleteHandler, {
-              startId,
-              endId: this.trackedIds.idList.at(step.to - 1),
-              contentLength: step.to - step.from + 1,
-            });
-          }
-        }
-        // Insert part
-        if (step.slice.size > 0) {
-          const before = this.trackedIds.idList.at(step.from - 1);
-          const newId = this.newId(before, this.trackedIds.idList);
-
-          // Set isInWord if the first inserted char and the preceding char are both letters.
-          if (
-            step.slice.content.childCount === 1 &&
-            step.slice.content.firstChild!.isText
-          ) {
-            const content = step.slice.content.firstChild!.text!;
-            if (/[a-zA-z]/.test(content[0]) && step.from > 0) {
-              const beforeChar = tr.docs[i].textBetween(
-                step.from - 1,
-                step.from
-              );
-              if (beforeChar.length > 0 && /[a-zA-z]/.test(beforeChar[0])) {
-                this.mutate(InsertInWordHandler, {
-                  before,
-                  id: newId,
-                  content,
-                });
-                continue;
-              }
-            }
-          }
-
-          this.mutate(InsertHandler, {
-            before,
-            id: newId,
-            contentJson: step.slice.toJSON(),
+          // Delete or delete-and-insert.
+          addMutation(ReplaceHandler, {
+            fromId: currentIds.idList.at(step.from),
+            toId:
+              step.to === step.from + 1
+                ? undefined
+                : currentIds.idList.at(step.to - 1),
+            insert:
+              step.slice.size === 0
+                ? undefined
+                : {
+                    newId: getNewId(
+                      step.from === 0 ? null : currentIds.idList.at(step.from)
+                    ),
+                    sliceJson: step.slice.toJSON(),
+                  },
+          });
+        } else {
+          // Insert only.
+          const beforeId =
+            step.from === 0 ? null : currentIds.idList.at(step.from - 1);
+          addMutation(InsertHandler, {
+            beforeId,
+            newId: getNewId(beforeId),
+            sliceJson: step.slice.toJSON(),
           });
         }
       } else {
@@ -133,61 +154,68 @@ export class ProseMirrorWrapper {
         // Skip future steps because their positions may be messed up.
         break;
       }
-    }
-  }
 
-  private newId(before: ElementId | null, idList: IdList): ElementId {
-    if (before !== null && before.bunchId.startsWith(this.clientId)) {
-      if (idList.maxCounter(before.bunchId) === before.counter) {
-        return { bunchId: before.bunchId, counter: before.counter + 1 };
+      if (DEBUG) {
+        console.log("  mutation:", mutations.at(-1));
       }
     }
 
-    const bunchId = `${this.clientId}_${this.nextBunchIdCounter++}`;
-    return { bunchId, counter: 0 };
+    // Process mutations.
+    currentTr.setMeta(META_KEY, true);
+    this.trackedIds = currentIds;
+    // This will update this.clientState (via onTransaction's top case). (TODO: check it actually runs)
+    this.editor.view.updateState(this.clientState.apply(tr));
+    // Store for rebasing and send to server.
+    this.pendingMutations.push(...mutations);
+    this.onLocalMutations(mutations);
   }
 
-  /**
-   * Performs a local mutation. This is what you should call in response to user
-   * input, instead of updating the Prosemirror state directly.
-   */
-  mutate<T>(handler: ClientMutationHandler<T>, args: T): void {
-    const clientCounter = this.nextClientCounter;
-    const mutation: ClientMutation = {
-      name: handler.name,
-      args,
-      clientCounter,
-    };
+  // /**
+  //  * Performs a local mutation. This is what you should call in response to user
+  //  * input, instead of updating the Prosemirror state directly.
+  //  */
+  // private mutate<T>(mutations: ClientMutation[]): void {
+  //   // Perform locally.
+  //   const tr = this.clientState.tr;
+  //   tr.setMeta(META_KEY, true);
+  //   for (let i = 0; i < mutations.length; i++) {
+  //     const mutation = mutations[i];
+  //     if (DEBUG) {
+  //       console.log(`mutate ${i + 1}/${mutations.length}`, mutation);
+  //       console.log(tr.doc);
+  //     }
+  //     const handler = allHandlers.find(
+  //       (handler) => handler.name === mutation.name
+  //     )!;
+  //     handler.apply(tr, this.trackedIds, mutation.args);
+  //   }
+  //   if (DEBUG) console.log(tr.doc);
 
-    // Perform locally.
-    if (DEBUG) {
-      console.log("mutate", handler.name, args);
-      console.log("  before", this.view.state.doc);
-    }
-    const tr = this.view.state.tr;
-    handler.apply(tr, this.trackedIds, args);
-    tr.setMeta(META_KEY, true);
-    this.view.updateState(this.view.state.apply(tr));
-    if (DEBUG) console.log("  after", this.view.state.doc);
-
-    // Store and send to server.
-    this.nextClientCounter++;
-    this.pendingMutations.push(mutation);
-    this.onLocalMutation(mutation);
-  }
+  //   // Store and send to server.
+  //   this.pendingMutations.push(...mutations);
+  //   this.onLocalMutations(mutations);
+  // }
 
   // TODO: Batching - only need to do this once every 100ms or so (less if it's taking too long).
   receive(mutation: ServerMutationMessage): void {
+    if (DEBUG) console.log("Receive mutation", this.serverState.doc);
+
     // Store the user's selection in terms of ElementIds.
-    const idSel = selectionToIds(this.view.state, this.trackedIds.idList);
+    const idSel = selectionToIds(
+      this.editor.view.state,
+      this.trackedIds.idList
+    );
 
     // Apply the mutation to our copy of the server's state.
     const serverTr = this.serverState.tr;
     serverTr.setMeta(META_KEY, true);
     for (const stepJson of mutation.stepsJson) {
-      serverTr.step(Step.fromJSON(schema, stepJson));
+      const step = Step.fromJSON(this.serverState.schema, stepJson);
+      if (DEBUG) console.log("  step:", step);
+      serverTr.step(step);
     }
     this.serverState = this.serverState.apply(serverTr);
+    if (DEBUG) console.log("  new server state:", this.serverState.doc);
 
     const serverTrackedIds = new TrackedIdList(this.serverIdList, false);
     for (const update of mutation.idListUpdates) {
@@ -208,6 +236,7 @@ export class ProseMirrorWrapper {
     }
 
     // Re-apply pending local mutations to the new server state.
+    // TODO (here and on server): account for possibility that PM doesn't like the rebased step.
     const tr = this.serverState.tr;
     this.trackedIds = new TrackedIdList(this.serverIdList, false);
     for (const pending of this.pendingMutations) {
@@ -222,7 +251,7 @@ export class ProseMirrorWrapper {
 
     tr.setMeta(META_KEY, true);
     tr.setMeta("addToHistory", false);
-    this.view.updateState(this.serverState.apply(tr));
+    this.editor.view.updateState(this.serverState.apply(tr));
   }
 }
 

@@ -12,5 +12,5 @@
     "noEmit": true,
     "rootDir": "src"
   },
-  "include": ["src/server", "src/common"]
+  "include": ["src/server/**/*", "src/common/**/*"]
 }

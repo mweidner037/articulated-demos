@@ -13,7 +13,7 @@ client.onMessage = (data) => {
   const msg = JSON.parse(data) as ServerMessage;
   if (msg.type === "hello") {
     // Got the initial state. Start ProseMirror.
-    const wrapper = new ProseMirrorWrapper(clientId, onLocalMutation, msg);
+    const wrapper = new ProseMirrorWrapper(clientId, onLocalMutations, msg);
     client.onMessage = (data) => onMessage(data, wrapper);
   } else {
     console.error("Received non-welcome message first: " + msg.type);
@@ -31,9 +31,9 @@ function onMessage(data: string, wrapper: ProseMirrorWrapper): void {
   }
 }
 
-function onLocalMutation(mutation: ClientMutation) {
+function onLocalMutations(mutations: ClientMutation[]) {
   // TODO: Batching.
-  send({ type: "mutation", clientId, mutations: [mutation] });
+  send({ type: "mutation", clientId, mutations });
 }
 
 function send(msg: ClientMessage): void {
