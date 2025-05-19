@@ -129,7 +129,7 @@ export class RichTextServer {
               })
             );
           }
-          handler.apply(tr, this.trackedIds, mutation.args);
+          handler.apply(tr, this.trackedIds, mutation.args, this.state.schema);
           if (DEBUG) {
             console.log(
               "result:\n",

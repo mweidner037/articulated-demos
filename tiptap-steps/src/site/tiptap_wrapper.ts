@@ -97,7 +97,7 @@ export class ProseMirrorWrapper {
     const currentTr = this.clientState.tr;
     const currentIds = new TrackedIdList(this.trackedIds.idList, false);
     const addMutation = <T>(handler: ClientMutationHandler<T>, args: T) => {
-      handler.apply(currentTr, currentIds, args);
+      handler.apply(currentTr, currentIds, args, this.clientState.schema);
       mutations.push({
         name: handler.name,
         args,
@@ -151,8 +151,10 @@ export class ProseMirrorWrapper {
         }
       } else {
         console.error("Unsupported step:", step);
-        // Skip future steps because their positions may be messed up.
-        break;
+        // We don't know what to do; future step positions and the selection will get messed up.
+        // Leave the doc unchanged (locally & on the server).
+        this.editor.view.updateState(this.clientState);
+        return;
       }
 
       if (DEBUG) {
@@ -162,9 +164,19 @@ export class ProseMirrorWrapper {
 
     // Process mutations.
     currentTr.setMeta(META_KEY, true);
+    if (DEBUG) {
+      console.log("Preserving selection", tr.selection.toJSON(), currentTr.doc);
+      console.log(currentTr);
+    }
+    currentTr.setSelection(
+      Selection.fromJSON(currentTr.doc, tr.selection.toJSON())
+    );
     this.trackedIds = currentIds;
-    // This will update this.clientState (via onTransaction's top case). (TODO: check it actually runs)
-    this.editor.view.updateState(this.clientState.apply(tr));
+    // Note: updateState doesn't call onTransaction, hence why we update clientState.
+    this.clientState = this.clientState.apply(currentTr);
+    console.log("new clientState", this.clientState.doc.toJSON());
+    this.editor.view.updateState(this.clientState);
+    console.log("editor", this.editor.view.state.doc.toJSON());
     // Store for rebasing and send to server.
     this.pendingMutations.push(...mutations);
     this.onLocalMutations(mutations);
@@ -198,6 +210,8 @@ export class ProseMirrorWrapper {
 
   // TODO: Batching - only need to do this once every 100ms or so (less if it's taking too long).
   receive(mutation: ServerMutationMessage): void {
+    // We use Server Reconciliation: https://mattweidner.com/2024/06/04/server-architectures.html#1-server-reconciliation
+
     if (DEBUG) console.log("Receive mutation", this.serverState.doc);
 
     // Store the user's selection in terms of ElementIds.
@@ -243,7 +257,7 @@ export class ProseMirrorWrapper {
       const handler = allHandlers.find(
         (handler) => handler.name === pending.name
       )!;
-      handler.apply(tr, this.trackedIds, pending.args);
+      handler.apply(tr, this.trackedIds, pending.args, this.serverState.schema);
     }
 
     // Restore selection.

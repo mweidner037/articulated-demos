@@ -1,7 +1,6 @@
-import { Slice } from "@tiptap/pm/model";
+import { Schema, Slice } from "@tiptap/pm/model";
 import { Transaction } from "@tiptap/pm/state";
 import { ElementId } from "articulated";
-import { TIPTAP_SCHEMA } from "../common/tiptap";
 import { TrackedIdList } from "./tracked_id_list";
 
 export type ClientMutation<T = any> = {
@@ -20,7 +19,12 @@ export type ClientMutationHandler<T> = {
    * Set the selection to what it should be if the user just performed this action,
    * in case we are applying the mutation locally for the first time.
    */
-  apply(tr: Transaction, trackedIds: TrackedIdList, args: T): void;
+  apply(
+    tr: Transaction,
+    trackedIds: TrackedIdList,
+    args: T,
+    schema: Schema
+  ): void;
 };
 
 // Although this derives from the same step (ReplaceStep) as ReplaceHandler,
@@ -35,10 +39,11 @@ export const InsertHandler: ClientMutationHandler<{
   sliceJson: unknown;
 }> = {
   name: "insert",
-  apply(tr, trackedIds, { beforeId, newId, sliceJson }) {
-    const slice = Slice.fromJSON(TIPTAP_SCHEMA, sliceJson);
+  apply(tr, trackedIds, { beforeId, newId, sliceJson }, schema) {
+    const slice = Slice.fromJSON(schema, sliceJson);
     trackedIds.insertAfter(beforeId, newId, slice.size);
     const index = trackedIds.idList.indexOf(newId);
+    // TODO: account for no-op/doesn't-fit case (don't change idList).
     tr.replace(index, index, slice);
   },
 };
@@ -58,7 +63,7 @@ export const ReplaceHandler: ClientMutationHandler<{
   };
 }> = {
   name: "replace",
-  apply(tr, trackedIds, { fromId, toId, insert }) {
+  apply(tr, trackedIds, { fromId, toId, insert }, schema) {
     const from = trackedIds.idList.indexOf(fromId, "right");
     const to =
       toId === undefined ? from : trackedIds.idList.indexOf(toId, "left");
@@ -66,9 +71,11 @@ export const ReplaceHandler: ClientMutationHandler<{
     const slice =
       insert === undefined
         ? undefined
-        : Slice.fromJSON(TIPTAP_SCHEMA, insert.sliceJson);
+        : Slice.fromJSON(schema, insert.sliceJson);
 
     if (from <= to) {
+      // TODO: Use replaceRange instead? Adds some rebasing niceness.
+      // Need to ensure trackedIds updates likewise (deletes same range).
       tr.replace(from, to + 1, slice);
       trackedIds.deleteRange(from, to);
       if (insert) {
