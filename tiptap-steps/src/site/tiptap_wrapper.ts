@@ -6,11 +6,17 @@ import {
   Selection,
   TextSelection,
 } from "@tiptap/pm/state";
-import { ReplaceStep, Step } from "@tiptap/pm/transform";
+import {
+  AddMarkStep,
+  RemoveMarkStep,
+  ReplaceStep,
+  Step,
+} from "@tiptap/pm/transform";
 import { ElementId, IdList } from "articulated";
 import { assert } from "chai";
 import {
   allHandlers,
+  ChangeMarkHandler,
   ClientMutation,
   ClientMutationHandler,
   InsertHandler,
@@ -149,6 +155,24 @@ export class ProseMirrorWrapper {
             sliceJson: step.slice.toJSON(),
           });
         }
+      } else if (
+        step instanceof AddMarkStep ||
+        step instanceof RemoveMarkStep
+      ) {
+        const isAdd = step instanceof AddMarkStep;
+        const inclusive = step.mark.type.spec.inclusive ?? true;
+        const fromId = currentIds.idList.at(step.from);
+        const toId = inclusive
+          ? step.to === currentTr.doc.nodeSize - 1
+            ? null
+            : currentIds.idList.at(step.to + 1)
+          : currentIds.idList.at(step.to);
+        addMutation(ChangeMarkHandler, {
+          fromId,
+          toId,
+          markJson: step.mark.toJSON(),
+          isAdd,
+        });
       } else {
         console.error("Unsupported step:", step);
         // We don't know what to do; future step positions and the selection will get messed up.
@@ -310,8 +334,8 @@ function selectionFromIds(
       return Selection.near(doc.resolve(pos));
     case "textRange":
       const from = idList.indexOf(idSel.start, "right");
-      const to = idList.indexOf(idSel.end, "left");
-      if (to < from) return Selection.near(doc.resolve(from));
+      const to = idList.indexOf(idSel.end, "left") + 1;
+      if (to <= from) return Selection.near(doc.resolve(from));
       const [anchor, head] = idSel.forwards ? [from, to] : [to, from];
       return TextSelection.between(doc.resolve(anchor), doc.resolve(head));
     case "unsupported":

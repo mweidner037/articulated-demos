@@ -1,4 +1,4 @@
-import { Schema, Slice } from "@tiptap/pm/model";
+import { Mark, Schema, Slice } from "@tiptap/pm/model";
 import { Transaction } from "@tiptap/pm/state";
 import { ElementId } from "articulated";
 import { TrackedIdList } from "./tracked_id_list";
@@ -43,6 +43,7 @@ export const InsertHandler: ClientMutationHandler<{
     const slice = Slice.fromJSON(schema, sliceJson);
     trackedIds.insertAfter(beforeId, newId, slice.size);
     const index = trackedIds.idList.indexOf(newId);
+    // TODO: Use direct steps instead of interpreting, for max chance of compat + tiptap-steps spirit.
     // TODO: account for no-op/doesn't-fit case (don't change idList).
     tr.replace(index, index, slice);
   },
@@ -95,7 +96,33 @@ export const ReplaceHandler: ClientMutationHandler<{
   },
 };
 
+export const ChangeMarkHandler: ClientMutationHandler<{
+  fromId: ElementId;
+  /** If the mark is inclusive, this is the exclusive end of the range, else the inclusive end. */
+  toId: ElementId | null;
+  markJson: unknown;
+  isAdd: boolean;
+}> = {
+  name: "changeMark",
+  apply(tr, trackedIds, { fromId, toId, markJson, isAdd }, schema) {
+    const mark = Mark.fromJSON(schema, markJson);
+    const inclusive = mark.type.spec.inclusive ?? true;
+    const from = trackedIds.idList.indexOf(fromId, "right");
+    const to = inclusive
+      ? toId === null
+        ? tr.doc.nodeSize
+        : trackedIds.idList.indexOf(toId, "right")
+      : trackedIds.idList.indexOf(toId!, "left") + 1;
+    // TODO: Expand to beginning of paragraph if inclusive. (semantic rebasing version?)
+    if (from < to) {
+      if (isAdd) tr.addMark(from, to, mark);
+      else tr.removeMark(from, to, mark);
+    }
+  },
+};
+
 export const allHandlers: ClientMutationHandler<any>[] = [
   InsertHandler,
   ReplaceHandler,
+  ChangeMarkHandler,
 ];
