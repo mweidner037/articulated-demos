@@ -1,5 +1,6 @@
 import { Mark, Schema, Slice } from "@tiptap/pm/model";
 import { Transaction } from "@tiptap/pm/state";
+import { Step } from "@tiptap/pm/transform";
 import { ElementId } from "articulated";
 import { TrackedIdList } from "./tracked_id_list";
 
@@ -9,6 +10,8 @@ export type ClientMutation<T = any> = {
   args: T;
   clientCounter: number;
 };
+
+// TODO: Change all to use tr.step? For max tiptap-step-ness.
 
 export type ClientMutationHandler<T> = {
   name: string;
@@ -121,8 +124,52 @@ export const ChangeMarkHandler: ClientMutationHandler<{
   },
 };
 
+export const ChangeNodeMarkHandler: ClientMutationHandler<{
+  id: ElementId;
+  markJson: unknown;
+  isAdd: boolean;
+}> = {
+  name: "changeNodeMark",
+  apply(tr, trackedIds, { id, markJson, isAdd }, schema) {
+    // TODO: articulated: clarify default is none; upgrade both demos to use 1.0.1.
+    const pos = trackedIds.idList.indexOf(id);
+    if (pos === -1) return;
+    // None of our mutations change the node at an ElementId, so pos should contain
+    // "the same" node that was targeted originally.
+    const mark = Mark.fromJSON(schema, markJson);
+    if (isAdd) tr.addNodeMark(pos, mark);
+    else tr.removeNodeMark(pos, mark);
+  },
+};
+
+export const NodeAttrHandler: ClientMutationHandler<{
+  id: ElementId;
+  attr: string;
+  value: unknown;
+}> = {
+  name: "nodeAttr",
+  apply(tr, trackedIds, { id, attr, value }, schema) {
+    const pos = trackedIds.idList.indexOf(id);
+    if (pos === -1) return;
+    // None of our mutations change the node at an ElementId, so pos should contain
+    // "the same" node that was targeted originally.
+    tr.setNodeAttribute(pos, attr, value);
+  },
+};
+
+export const DocAttrHandler: ClientMutationHandler<{ stepJson: unknown }> = {
+  name: "docAttr",
+  apply(tr, _trackedIds, { stepJson }, schema) {
+    const step = Step.fromJSON(schema, stepJson);
+    tr.step(step);
+  },
+};
+
 export const allHandlers: ClientMutationHandler<any>[] = [
   InsertHandler,
   ReplaceHandler,
   ChangeMarkHandler,
+  ChangeNodeMarkHandler,
+  NodeAttrHandler,
+  DocAttrHandler,
 ];

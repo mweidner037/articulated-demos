@@ -8,7 +8,11 @@ import {
 } from "@tiptap/pm/state";
 import {
   AddMarkStep,
+  AddNodeMarkStep,
+  AttrStep,
+  DocAttrStep,
   RemoveMarkStep,
+  RemoveNodeMarkStep,
   ReplaceStep,
   Step,
 } from "@tiptap/pm/transform";
@@ -17,9 +21,12 @@ import { assert } from "chai";
 import {
   allHandlers,
   ChangeMarkHandler,
+  ChangeNodeMarkHandler,
   ClientMutation,
   ClientMutationHandler,
+  DocAttrHandler,
   InsertHandler,
+  NodeAttrHandler,
   ReplaceHandler,
 } from "../common/client_mutations";
 import { DEBUG } from "../common/debug";
@@ -173,6 +180,26 @@ export class ProseMirrorWrapper {
           markJson: step.mark.toJSON(),
           isAdd,
         });
+      } else if (
+        step instanceof AddNodeMarkStep ||
+        step instanceof RemoveNodeMarkStep
+      ) {
+        const isAdd = step instanceof AddNodeMarkStep;
+        const id = currentIds.idList.at(step.pos);
+        addMutation(ChangeNodeMarkHandler, {
+          id,
+          markJson: step.mark.toJSON(),
+          isAdd,
+        });
+      } else if (step instanceof AttrStep) {
+        const id = currentIds.idList.at(step.pos);
+        addMutation(NodeAttrHandler, {
+          id,
+          attr: step.attr,
+          value: step.value,
+        });
+      } else if (step instanceof DocAttrStep) {
+        addMutation(DocAttrHandler, { stepJson: step.toJSON() });
       } else {
         console.error("Unsupported step:", step);
         // We don't know what to do; future step positions and the selection will get messed up.
