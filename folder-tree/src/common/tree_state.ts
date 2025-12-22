@@ -26,7 +26,7 @@ export class TreeState {
     this.nodes = nodes;
   }
 
-  apply(mutation: TreeMutation): TreeState {
+  apply(mutation: TreeMutation) {
     let newIdList = this.idList;
     const newNodes = new Map(this.nodes);
 
@@ -116,11 +116,11 @@ export class TreeState {
     }
   }
 
-  getNode(id: ElementId): TreeNode | undefined {
+  getNode(id: ElementId) {
     return this.nodes.get(elementIdToString(id));
   }
 
-  getAllNodes(): TreeNode[] {
+  getAllNodes() {
     const result: TreeNode[] = [];
     for (const id of this.idList) {
       const node = this.getNode(id);
@@ -129,7 +129,7 @@ export class TreeState {
     return result;
   }
 
-  getChildren(parentId: ElementId | null): TreeNode[] {
+  getChildren(parentId: ElementId | null) {
     const parentKey = parentId ? elementIdToString(parentId) : null;
     return this.getAllNodes().filter(
       (node) =>
@@ -138,10 +138,7 @@ export class TreeState {
     );
   }
 
-  private isDescendant(
-    descendantId: ElementId,
-    ancestorId: ElementId
-  ): boolean {
+  private isDescendant(descendantId: ElementId, ancestorId: ElementId) {
     let current = this.getNode(descendantId);
     while (current && current.parentId) {
       if (elementIdsEqual(current.parentId, ancestorId)) return true;
@@ -157,7 +154,7 @@ export class TreeState {
     };
   }
 
-  static load(data: TreeStateData): TreeState {
+  static load(data: TreeStateData) {
     const idList = IdList.load(data.idListJson);
     const nodes = new Map<string, TreeNode>(data.nodesJson);
     return new TreeState(idList, nodes);

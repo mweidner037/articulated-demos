@@ -11,7 +11,7 @@ export class WebSocketClient {
     this.ws.addEventListener("message", (e) => this.messageHandler(e));
   }
 
-  private messageHandler(event: MessageEvent<string>): void {
+  private messageHandler(event: MessageEvent<string>) {
     const message = event.data;
     if (this._testConnected) {
       this.onMessage?.(message);
@@ -20,7 +20,7 @@ export class WebSocketClient {
     }
   }
 
-  private sendInternal(message: string): void {
+  private sendInternal(message: string) {
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(message);
     } else {
@@ -28,7 +28,7 @@ export class WebSocketClient {
     }
   }
 
-  send(message: string): void {
+  send(message: string) {
     if (this._testConnected) {
       this.sendInternal(message);
     } else {
@@ -54,7 +54,7 @@ export class WebSocketClient {
     }
   }
 
-  get testConnected(): boolean {
+  get testConnected() {
     return this._testConnected;
   }
 }

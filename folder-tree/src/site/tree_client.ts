@@ -81,9 +81,7 @@ export class TreeClient {
     this.onStateChange(this.currentState.getAllNodes());
   }
 
-  /**
-   * Locally mutation
-   */
+  /** Locally mutation */
   private mutate(mutation: TreeMutation) {
     const clientMutation: ClientMutation = {
       mutation,
