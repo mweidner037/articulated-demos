@@ -12,6 +12,7 @@ export type ClientMutation<T = any> = {
 };
 
 // TODO: Change all to use tr.step? For max tiptap-step-ness.
+// TODO: error handling - skip whole mutation if it errors. Somehow rollback idList & tr.
 
 export type ClientMutationHandler<T> = {
   name: string;
@@ -48,6 +49,7 @@ export const InsertHandler: ClientMutationHandler<{
     const index = trackedIds.idList.indexOf(newId);
     // TODO: Use direct steps instead of interpreting, for max chance of compat + tiptap-steps spirit.
     // TODO: account for no-op/doesn't-fit case (don't change idList).
+    // TODO: Keep any marks on the surrounding text, extending if spec says to.
     tr.replace(index, index, slice);
   },
 };
@@ -65,6 +67,7 @@ export const ReplaceHandler: ClientMutationHandler<{
     newId: ElementId;
     sliceJson: unknown;
   };
+  // TODO: structure
 }> = {
   name: "replace",
   apply(tr, trackedIds, { fromId, toId, insert }, schema) {
@@ -83,7 +86,7 @@ export const ReplaceHandler: ClientMutationHandler<{
       tr.replace(from, to + 1, slice);
       trackedIds.deleteRange(from, to);
       if (insert) {
-        // We an insert id anywhere within the range's exclusive boundary;
+        // We can insert id anywhere within the range's exclusive boundary;
         // different choices only affect our sort order relative to chars that are
         // inserted-after one of the deleted ids.
         // Let's put id just before the range.
@@ -97,6 +100,27 @@ export const ReplaceHandler: ClientMutationHandler<{
       }
     }
   },
+};
+
+export const ReplaceAroundHandler: ClientMutationHandler<{
+  /** Inclusive */
+  fromId: ElementId;
+  /** Inclusive */
+  toId: ElementId;
+  /** Exclusive - points just before the gap start */
+  gapFromId: ElementId;
+  /** Exclusive - points just after the gap start */
+  gapToId: ElementId;
+  sliceJson: Slice;
+  insert: number;
+}> = {
+  name: "replaceAround",
+  apply(
+    tr,
+    trackedIds,
+    { fromId, toId, gapFromId, gapToId, sliceJson, insert },
+    schema
+  ) {},
 };
 
 export const ChangeMarkHandler: ClientMutationHandler<{

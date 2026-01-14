@@ -1,3 +1,4 @@
+import { getSchema } from "@tiptap/core";
 import { EditorState } from "@tiptap/pm/state";
 import { IdList } from "articulated";
 import util from "util";
@@ -6,7 +7,7 @@ import { ClientMessage } from "../common/client_messages";
 import { allHandlers } from "../common/client_mutations";
 import { DEBUG } from "../common/debug";
 import { ServerMessage } from "../common/server_messages";
-import { TIPTAP_SCHEMA } from "../common/tiptap";
+import { TIPTAP_EXTENSIONS } from "../common/tiptap";
 import { TrackedIdList } from "../common/tracked_id_list";
 
 const heartbeatInterval = 30000;
@@ -27,7 +28,7 @@ export class RichTextServer {
   private clients = new Set<WebSocket>();
 
   constructor(readonly wss: WebSocketServer) {
-    this.state = EditorState.create({ schema: TIPTAP_SCHEMA });
+    this.state = EditorState.create({ schema: getSchema(TIPTAP_EXTENSIONS) });
     const idList = IdList.new().insertAfter(
       null,
       { bunchId: "init", counter: 0 },

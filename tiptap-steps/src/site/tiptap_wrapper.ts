@@ -13,6 +13,7 @@ import {
   DocAttrStep,
   RemoveMarkStep,
   RemoveNodeMarkStep,
+  ReplaceAroundStep,
   ReplaceStep,
   Step,
 } from "@tiptap/pm/transform";
@@ -162,6 +163,7 @@ export class ProseMirrorWrapper {
             sliceJson: step.slice.toJSON(),
           });
         }
+      } else if (step instanceof ReplaceAroundStep) {
       } else if (
         step instanceof AddMarkStep ||
         step instanceof RemoveMarkStep
